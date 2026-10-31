@@ -1,0 +1,310 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clipora — Smart Snippet Manager</title>
+<style>
+:root {
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --text: #202431;
+  --muted: #777f91;
+  --accent: #6658e8;
+  --border: #e7e9f0;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 20px 6%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.logo { font-size: 23px; font-weight: 800; letter-spacing: -1px; }
+.logo span { color: var(--accent); }
+button, input, textarea, select { font: inherit; }
+button {
+  cursor: pointer;
+  border: 0;
+  border-radius: 9px;
+  padding: 10px 15px;
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+button:hover { opacity: .88; }
+button.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+main { max-width: 1100px; margin: 40px auto; padding: 0 20px; }
+.intro { margin-bottom: 28px; }
+.intro h1 { margin: 0 0 8px; font-size: 32px; }
+.intro p { color: var(--muted); margin: 0; }
+.toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+input, textarea, select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+}
+.search { flex: 1; min-width: 200px; }
+#notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 18px;
+}
+.note {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  min-width: 0;
+}
+.note h3 { margin: 0 0 10px; }
+.note p {
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.tag {
+  display: inline-block;
+  background: #eeecff;
+  color: #6658e8;
+  padding: 4px 9px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+.actions { display: flex; gap: 8px; margin-top: 15px; }
+.actions button { font-size: 12px; padding: 8px 10px; }
+.empty { color: var(--muted); text-align: center; grid-column: 1/-1; padding: 50px; }
+dialog {
+  width: min(500px, 92%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 25px;
+  background: var(--surface);
+  color: var(--text);
+}
+dialog::backdrop { background: #11182788; }
+dialog h2 { margin-top: 0; }
+form { display: grid; gap: 12px; }
+textarea { min-height: 140px; resize: vertical; }
+footer { text-align: center; padding: 30px; color: var(--muted); font-size: 13px; }
+
+body.dark {
+  --bg: #11131b;
+  --surface: #1b1e29;
+  --text: #eef0f8;
+  --muted: #a0a7ba;
+  --border: #303442;
+}
+body.dark .tag { background: #302b54; color: #b9b1ff; }
+
+@media (max-width: 600px) {
+  header { padding: 16px 20px; }
+  .intro h1 { font-size: 27px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">clip<span>ora</span></div>
+  <button class="secondary" id="themeBtn">☾ Theme</button>
+</header>
+
+<main>
+  <section class="intro">
+    <h1>Your ideas, organized.</h1>
+    <p>Save, search, and manage your snippets in one simple workspace.</p>
+  </section>
+
+  <div class="toolbar">
+    <input class="search" id="search" placeholder="Search your snippets...">
+    <select id="filter" style="width:auto;min-width:130px">
+      <option value="all">All categories</option>
+      <option value="Code">Code</option>
+      <option value="Note">Note</option>
+      <option value="Link">Link</option>
+    </select>
+    <button id="addBtn">+ New snippet</button>
+  </div>
+
+  <section id="notes"></section>
+</main>
+
+<dialog id="editor">
+  <h2 id="formTitle">New snippet</h2>
+  <form id="noteForm">
+    <input id="title" placeholder="Title" required maxlength="100">
+    <select id="category">
+      <option>Code</option>
+      <option>Note</option>
+      <option>Link</option>
+    </select>
+    <input id="tag" placeholder="Tag (optional)" maxlength="40">
+    <textarea id="content" placeholder="Write something useful..." required></textarea>
+    <div class="actions">
+      <button type="submit">Save snippet</button>
+      <button type="button" class="secondary" id="cancelBtn">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<footer>Clipora · Your personal snippet workspace</footer>
+
+<script>
+const STORAGE_KEY = "clipora-snippets-v1";
+const $ = id => document.getElementById(id);
+
+let snippets = loadSnippets();
+let editingId = null;
+
+function loadSnippets() {
+  try {
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSnippets() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(snippets));
+}
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;",
+    '"': "&quot;", "'": "&#39;"
+  })[char]);
+}
+
+function render() {
+  const query = $("search").value.toLowerCase().trim();
+  const category = $("filter").value;
+
+  const filtered = snippets.filter(item => {
+    const matchesCategory = category === "all" || item.category === category;
+    const text = `${item.title} ${item.content} ${item.tag}`.toLowerCase();
+    return matchesCategory && text.includes(query);
+  });
+
+  $("notes").innerHTML = filtered.length
+    ? filtered.map(item => `
+      <article class="note">
+        <h3>${escapeHTML(item.title)}</h3>
+        <span class="tag">${escapeHTML(item.category)}</span>
+        ${item.tag ? `<span class="tag">${escapeHTML(item.tag)}</span>` : ""}
+        <p>${escapeHTML(item.content)}</p>
+        <div class="actions">
+          <button onclick="copySnippet('${item.id}')">Copy</button>
+          <button class="secondary" onclick="editSnippet('${item.id}')">Edit</button>
+          <button class="secondary" onclick="deleteSnippet('${item.id}')">Delete</button>
+        </div>
+      </article>
+    `).join("")
+    : '<div class="empty">No snippets found. Create your first one!</div>';
+}
+
+function openEditor(item = null) {
+  editingId = item?.id || null;
+  $("formTitle").textContent = item ? "Edit snippet" : "New snippet";
+  $("title").value = item?.title || "";
+  $("category").value = item?.category || "Code";
+  $("tag").value = item?.tag || "";
+  $("content").value = item?.content || "";
+  $("editor").showModal();
+  $("title").focus();
+}
+
+$("addBtn").addEventListener("click", () => openEditor());
+$("cancelBtn").addEventListener("click", () => $("editor").close());
+
+$("noteForm").addEventListener("submit", event => {
+  event.preventDefault();
+
+  const item = {
+    id: editingId || crypto.randomUUID(),
+    title: $("title").value.trim(),
+    category: $("category").value,
+    tag: $("tag").value.trim(),
+    content: $("content").value.trim(),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (!item.title || !item.content) return;
+
+  if (editingId) {
+    snippets = snippets.map(old => old.id === editingId ? item : old);
+  } else {
+    snippets.unshift(item);
+  }
+
+  saveSnippets();
+  render();
+  $("editor").close();
+});
+
+function editSnippet(id) {
+  const item = snippets.find(item => item.id === id);
+  if (item) openEditor(item);
+}
+
+function deleteSnippet(id) {
+  if (!confirm("Delete this snippet?")) return;
+  snippets = snippets.filter(item => item.id !== id);
+  saveSnippets();
+  render();
+}
+
+async function copySnippet(id) {
+  const item = snippets.find(item => item.id === id);
+  if (!item) return;
+
+  try {
+    await navigator.clipboard.writeText(item.content);
+    alert("Snippet copied to clipboard!");
+  } catch {
+    alert("Clipboard access is unavailable. Please copy the text manually.");
+  }
+}
+
+$("search").addEventListener("input", render);
+$("filter").addEventListener("change", render);
+
+$("themeBtn").addEventListener("click", () => {
+  document.body.classList.toggle("dark");
+  localStorage.setItem("clipora-theme",
+    document.body.classList.contains("dark") ? "dark" : "light");
+});
+
+if (localStorage.getItem("clipora-theme") === "dark") {
+  document.body.classList.add("dark");
+}
+
+render();
+</script>
+
+</body>
+</html>
+
